@@ -19,6 +19,10 @@ import subprocess
 import threading
 import time
 from datetime import datetime, timedelta
+import pystray
+from PIL import Image, ImageDraw
+import signal
+import sys
 
 class ShutdownScheduler:
     """
@@ -47,6 +51,10 @@ class ShutdownScheduler:
         # Bind resize events to enforce size limits
         self.root.bind('<Configure>', self.enforce_size_limits)
         
+        # Bind minimize event to system tray
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        self.root.bind('<Unmap>', self.on_minimize)
+        
         # Center the window on screen
         self.root.eval('tk::PlaceWindow . center')
         
@@ -56,8 +64,19 @@ class ShutdownScheduler:
         self.remaining_seconds = 0
         self.mode = "countdown"  # "countdown" or "scheduled"
         
+        # Initialize system tray
+        self.tray_icon = None
+        self.is_minimized_to_tray = False
+        
         # Setup the user interface
         self.setup_ui()
+        
+        # Setup system tray
+        self.setup_system_tray()
+        
+        # Setup signal handlers for proper cleanup
+        signal.signal(signal.SIGINT, self.signal_handler)
+        signal.signal(signal.SIGTERM, self.signal_handler)
         
     def setup_ui(self):
         """Create and configure the user interface layout."""
@@ -451,11 +470,12 @@ class ShutdownScheduler:
         if self.timer_running:
             self.timer_running = False
             self.remaining_seconds = 0
-            self.timer_label.config(text="Set timer duration")
-            self.start_button.config(state="normal")
-            self.cancel_button.config(state="disabled")
-            # Reset mode display
-            self.on_mode_change()
+        
+        # Reset UI state
+        self.start_button.config(state="normal")
+        self.cancel_button.config(state="disabled")
+        # Reset mode display
+        self.on_mode_change()
     
     def timer_loop(self):
         """Main timer loop that runs in a separate thread."""
@@ -468,6 +488,8 @@ class ShutdownScheduler:
             
             # Check if timer has finished
             if self.remaining_seconds <= 0 and self.timer_running:
+                # Stop the timer thread before showing popup
+                self.timer_running = False
                 self.root.after(0, self.shutdown_computer)
                 break
     
@@ -486,6 +508,10 @@ class ShutdownScheduler:
                 display_text = f"Close the computer in {minutes} minutes {seconds} seconds"
             
             self.timer_label.config(text=display_text)
+            
+            # Update tray tooltip if minimized
+            if self.is_minimized_to_tray:
+                self.update_tray_tooltip()
         else:
             # Reset display when timer is not running
             mode_text = "countdown duration" if self.mode == "countdown" else "scheduled time"
@@ -510,7 +536,7 @@ class ShutdownScheduler:
         self.countdown_popup.grab_set()
         
         # Center the popup
-        self.countdown_popup.eval('tk::PlaceWindow . center')
+        self.center_popup()
         
         # Configure popup grid
         self.countdown_popup.grid_rowconfigure(0, weight=1)
@@ -575,6 +601,15 @@ class ShutdownScheduler:
         # Reset timer state
         self.cancel_timer()
     
+    def center_popup(self):
+        """Center the popup window on screen."""
+        self.countdown_popup.update_idletasks()
+        width = self.countdown_popup.winfo_width()
+        height = self.countdown_popup.winfo_height()
+        x = (self.countdown_popup.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.countdown_popup.winfo_screenheight() // 2) - (height // 2)
+        self.countdown_popup.geometry(f"{width}x{height}+{x}+{y}")
+    
     def execute_shutdown(self):
         """Execute the actual shutdown command."""
         try:
@@ -587,6 +622,160 @@ class ShutdownScheduler:
         except subprocess.CalledProcessError:
             messagebox.showerror("Error", "Failed to shutdown computer. Please shutdown manually.")
             self.cancel_timer()
+    
+    def create_tray_icon(self):
+        """Create a simple icon for the system tray."""
+        # Create a 64x64 icon with a simple design
+        width = 64
+        height = 64
+        
+        # Create image with dark background
+        image = Image.new('RGBA', (width, height), (43, 43, 43, 255))
+        draw = ImageDraw.Draw(image)
+        
+        # Draw a simple clock/timer icon
+        # Outer circle
+        draw.ellipse([8, 8, width-8, height-8], outline=(255, 255, 255, 255), width=3)
+        
+        # Clock hands
+        center_x, center_y = width // 2, height // 2
+        # Hour hand
+        draw.line([center_x, center_y, center_x, 12], fill=(255, 255, 255, 255), width=3)
+        # Minute hand
+        draw.line([center_x, center_y, center_x + 8, center_y], fill=(255, 255, 255, 255), width=2)
+        
+        return image
+    
+    def setup_system_tray(self):
+        """Setup the system tray icon and menu."""
+        try:
+            # Create tray icon
+            icon_image = self.create_tray_icon()
+            
+            # Create tray menu
+            menu = pystray.Menu(
+                pystray.MenuItem("Show Window", self.show_window),
+                pystray.MenuItem("Cancel Timer", self.cancel_timer_from_tray),
+                pystray.MenuItem("Exit", self.quit_app)
+            )
+            
+            # Create tray icon
+            self.tray_icon = pystray.Icon(
+                "shutdown_scheduler",
+                icon_image,
+                "Shutdown Scheduler",
+                menu
+            )
+            
+        except Exception as e:
+            print(f"Failed to setup system tray: {e}")
+    
+    def on_minimize(self, event):
+        """Handle window minimize event."""
+        if self.timer_running:
+            # Only minimize to tray if timer is running
+            self.minimize_to_tray()
+    
+    def minimize_to_tray(self):
+        """Minimize the window to system tray."""
+        try:
+            self.root.withdraw()  # Hide the window
+            self.is_minimized_to_tray = True
+            
+            # Start tray icon if not already running
+            if self.tray_icon and not self.tray_icon.visible:
+                self.tray_icon.run_detached()
+                
+        except Exception as e:
+            print(f"Failed to minimize to tray: {e}")
+    
+    def cleanup_tray_icon(self):
+        """Clean up the tray icon properly."""
+        try:
+            if self.tray_icon:
+                if self.tray_icon.visible:
+                    self.tray_icon.stop()
+                self.tray_icon = None
+        except Exception as e:
+            print(f"Failed to cleanup tray icon: {e}")
+    
+    def show_window(self, icon=None, item=None):
+        """Show the main window from system tray."""
+        try:
+            self.root.deiconify()  # Show the window
+            self.root.lift()  # Bring to front
+            self.root.focus_force()  # Focus the window
+            self.is_minimized_to_tray = False
+            
+            # Stop tray icon
+            if self.tray_icon and self.tray_icon.visible:
+                self.tray_icon.stop()
+                
+        except Exception as e:
+            print(f"Failed to show window: {e}")
+    
+    def cancel_timer_from_tray(self, icon=None, item=None):
+        """Cancel timer from system tray menu."""
+        self.cancel_timer()
+        if self.is_minimized_to_tray:
+            self.show_window()
+    
+    def on_closing(self):
+        """Handle window closing event."""
+        if self.timer_running:
+            # If timer is running, minimize to tray instead of closing
+            self.minimize_to_tray()
+        else:
+            # If no timer running, close the app
+            self.quit_app()
+    
+    def quit_app(self, icon=None, item=None):
+        """Quit the application."""
+        try:
+            # Clean up tray icon properly
+            self.cleanup_tray_icon()
+            
+            # Cancel any running timer
+            if self.timer_running:
+                self.cancel_timer()
+            
+            # Destroy the main window
+            self.root.destroy()
+            
+            # Force exit the application
+            import os
+            os._exit(0)
+            
+        except Exception as e:
+            print(f"Failed to quit app: {e}")
+            # Force exit even if there's an error
+            import os
+            os._exit(0)
+    
+    def update_tray_tooltip(self):
+        """Update the tray icon tooltip with remaining time."""
+        if self.tray_icon and self.timer_running and self.remaining_seconds > 0:
+            # Calculate remaining time
+            hours = self.remaining_seconds // 3600
+            minutes = (self.remaining_seconds % 3600) // 60
+            seconds = self.remaining_seconds % 60
+            
+            # Create tooltip text
+            if hours > 0:
+                tooltip_text = f"Shutdown in {hours}h {minutes}m {seconds}s"
+            else:
+                tooltip_text = f"Shutdown in {minutes}m {seconds}s"
+            
+            # Update tray icon tooltip
+            try:
+                self.tray_icon.title = tooltip_text
+            except:
+                pass  # Ignore errors if tray icon is not available
+    
+    def signal_handler(self, signum, frame):
+        """Handle system signals for proper cleanup."""
+        print(f"Received signal {signum}, cleaning up...")
+        self.quit_app()
     
     def run(self):
         """Start the application main loop."""

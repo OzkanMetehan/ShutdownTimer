@@ -1,9 +1,17 @@
-# Shutdown Timer App Dependencies
-# No external dependencies required - using built-in Python modules
-# This file is for future reference and potential future dependencies
+# Shutdown Scheduler - Python Dependencies
 
-# For packaging the app into an executable
-# pyinstaller==6.3.0
+# For development and building executable
+pyinstaller>=6.0.0
 
-# For enhanced GUI (optional future enhancement)
-# customtkinter==5.2.0 
+# For system tray functionality
+pystray>=0.19.0
+Pillow>=10.0.0
+
+# Built-in modules used (no installation needed):
+# - tkinter (GUI framework)
+# - subprocess (system commands)
+# - threading (concurrent operations)
+# - datetime (date/time handling)
+# - locale (system locale detection)
+# - os (operating system interface)
+# - time (time utilities) 
