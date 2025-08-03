@@ -1,0 +1,9 @@
+# Shutdown Timer App Dependencies
+# No external dependencies required - using built-in Python modules
+# This file is for future reference and potential future dependencies
+
+# For packaging the app into an executable
+# pyinstaller==6.3.0
+
+# For enhanced GUI (optional future enhancement)
+# customtkinter==5.2.0 
