@@ -1,6 +1,6 @@
 # Shutdown Scheduler
 
-A simple Windows desktop application for scheduling computer shutdowns with a modern dark interface.
+A simple Windows desktop application for scheduling computer shutdowns with a modern interface.
 
 ## 🚀 Quick Start
 
@@ -23,8 +23,7 @@ A simple Windows desktop application for scheduling computer shutdowns with a mo
 - **Easy Cancellation**: Cancel at any time with one click
 
 ### User Experience:
-- **Dark Theme**: Modern dark interface
-- **Responsive Design**: Adapts to window resizing
+- **Modern Interface**: Clean and intuitive design
 - **Smart Validation**: Prevents past dates/times
 - **System Date Format**: Automatically detects user's date format
 - **Single Instance**: Prevents multiple app instances from running simultaneously
@@ -41,8 +40,8 @@ A simple Windows desktop application for scheduling computer shutdowns with a mo
 ShutdownTimer/
 ├── enhanced_shutdown_timer.py    # Main application source
 ├── dist/
-│   └── ShutdownScheduler.exe     # Standalone executable (9.8MB)
-├── EXECUTABLE_README.md          # Instructions for executable
+│   └── ShutdownScheduler.exe     # Standalone executable (20MB)
+├── run_shutdown_timer.bat        # Quick launch script
 ├── README.md                     # This file
 ├── requirements.txt              # Python dependencies
 ├── .gitignore                   # Git ignore rules
@@ -92,6 +91,9 @@ pyinstaller --onefile --windowed enhanced_shutdown_timer.py
 1. **Check system tray** for the existing instance
 2. **Look for the app** in your taskbar
 3. **Use the existing instance** instead of opening a new one
+
+### Known Issues:
+- **Tray Mode Bug**: When a timer is running and you click radio buttons (Countdown Timer ↔ Scheduled Time), the app may unexpectedly go to tray mode. This is a known issue that will be fixed in future updates.
 
 ## 📝 Version Info
 

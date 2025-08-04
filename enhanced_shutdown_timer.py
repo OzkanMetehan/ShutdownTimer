@@ -5,10 +5,10 @@ Shutdown Scheduler - A simple Windows desktop application for scheduling compute
 Features:
 - Countdown timer: Set hours and minutes for immediate shutdown
 - Scheduled timer: Set a specific date and time for future shutdown
-- Adaptive UI: Responsive layout that centers content
-- Dark theme: Modern dark interface
+- Modern interface: Clean and intuitive design
 - Size constraints: Prevents window from becoming too small or large
 - Single instance: Prevents multiple instances from running simultaneously
+- System tray: Minimize to tray when timer is running
 
 Author: AI Assistant
 License: MIT
@@ -33,8 +33,6 @@ try:
     PSUTIL_AVAILABLE = True
 except ImportError:
     PSUTIL_AVAILABLE = False
-    print("Note: psutil not found. Single instance detection will be disabled.")
-    print("To enable this feature, run: pip install psutil")
 
 class ShutdownScheduler:
     """
@@ -58,19 +56,16 @@ class ShutdownScheduler:
         self.root.geometry("450x400")
         self.root.resizable(True, True)
         
-        # Apply dark theme
-        self.root.configure(bg='#2b2b2b')
+        # Apply default theme
+        self.root.configure(bg='#f0f0f0')
         
         # Set window size constraints
         self.root.minsize(400, 350)
         self.root.maxsize(800, 600)
         
-        # Bind resize events to enforce size limits
+        # Bind window events
         self.root.bind('<Configure>', self.enforce_size_limits)
-        
-        # Bind minimize event to system tray
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-        self.root.bind('<Unmap>', self.on_minimize)
         
         # Center the window on screen
         self.root.eval('tk::PlaceWindow . center')
@@ -148,7 +143,7 @@ class ShutdownScheduler:
                                     except (psutil.NoSuchProcess, psutil.AccessDenied):
                                         continue
                             except Exception as e:
-                                print(f"Error checking processes: {e}")
+                                pass
                         
                         # Process doesn't exist, remove stale lock file
                         try:
@@ -156,7 +151,6 @@ class ShutdownScheduler:
                         except:
                             pass
             except Exception as e:
-                print(f"Error reading lock file: {e}")
                 # If we can't read the lock file, try to remove it
                 try:
                     os.remove(lock_file_path)
@@ -193,7 +187,7 @@ class ShutdownScheduler:
             with open(self.lock_file_path, 'w') as f:
                 f.write(str(os.getpid()))
         except Exception as e:
-            print(f"Failed to create lock file: {e}")
+            pass
     
     def cleanup_lock_file(self):
         """Remove the lock file when the application exits."""
@@ -201,7 +195,7 @@ class ShutdownScheduler:
             if hasattr(self, 'lock_file_path') and os.path.exists(self.lock_file_path):
                 os.remove(self.lock_file_path)
         except Exception as e:
-            print(f"Failed to remove lock file: {e}")
+            pass
     
     def setup_ui(self):
         """Create and configure the user interface layout."""
@@ -418,13 +412,20 @@ class ShutdownScheduler:
     
     def enforce_size_limits(self, event):
         """
-        Enforce minimum and maximum window size limits.
+        Enforce minimum and maximum window size limits and detect minimize.
         
         Args:
             event: The configure event containing window dimensions
         """
-        # Only handle window resize events (not child widget events)
+        # Only handle root window events
         if event.widget == self.root:
+            # Check if window was minimized
+            if self.root.state() == 'iconic' and self.timer_running:
+                # User clicked minimize button and timer is running
+                self.minimize_to_tray()
+                return
+            
+            # Handle size limits
             width = event.width
             height = event.height
             
@@ -654,7 +655,7 @@ class ShutdownScheduler:
         self.countdown_popup.title("Shutdown Countdown")
         self.countdown_popup.geometry("400x200")
         self.countdown_popup.resizable(False, False)
-        self.countdown_popup.configure(bg='#2b2b2b')
+        self.countdown_popup.configure(bg='#f0f0f0')
         
         # Make popup modal (user must interact with it)
         self.countdown_popup.transient(self.root)
@@ -794,17 +795,10 @@ class ShutdownScheduler:
                 menu
             )
             
-            # Tray setup successful
-            
         except Exception as e:
-            print(f"Failed to setup system tray: {e}")
             self.tray_icon = None
     
-    def on_minimize(self, event):
-        """Handle window minimize event."""
-        if self.timer_running:
-            # Only minimize to tray if timer is running
-            self.minimize_to_tray()
+
     
     def minimize_to_tray(self):
         """Minimize the window to system tray."""
@@ -822,11 +816,8 @@ class ShutdownScheduler:
                 else:
                     # If already visible, update the tooltip
                     self.update_tray_tooltip()
-            else:
-                print("Warning: No tray icon available")
-                
         except Exception as e:
-            print(f"Failed to minimize to tray: {e}")
+            pass
     
     def cleanup_tray_icon(self):
         """Clean up the tray icon properly."""
@@ -836,7 +827,7 @@ class ShutdownScheduler:
                     self.tray_icon.stop()
                 self.tray_icon = None
         except Exception as e:
-            print(f"Failed to cleanup tray icon: {e}")
+            pass
     
     def __del__(self):
         """Destructor to ensure tray icon is cleaned up."""
@@ -859,7 +850,7 @@ class ShutdownScheduler:
             # The tray icon will be cleaned up when the app exits
                 
         except Exception as e:
-            print(f"Failed to show window: {e}")
+            pass
     
     def cancel_timer_from_tray(self, icon=None, item=None):
         """Cancel timer from system tray menu."""
@@ -888,7 +879,7 @@ class ShutdownScheduler:
                         import time
                         time.sleep(0.1)
                 except Exception as e:
-                    print(f"Failed to stop tray icon: {e}")
+                    pass
                 finally:
                     self.tray_icon = None
             
@@ -913,7 +904,7 @@ class ShutdownScheduler:
                         import time
                         time.sleep(0.1)
                 except Exception as e:
-                    print(f"Failed to stop tray icon: {e}")
+                    pass
                 finally:
                     self.tray_icon = None
             
@@ -931,7 +922,6 @@ class ShutdownScheduler:
             sys.exit(0)
             
         except Exception as e:
-            print(f"Failed to quit app: {e}")
             # Clean up lock file even if there's an error
             try:
                 self.cleanup_lock_file()
@@ -963,7 +953,6 @@ class ShutdownScheduler:
     
     def signal_handler(self, signum, frame):
         """Handle system signals for proper cleanup."""
-        print(f"Received signal {signum}, cleaning up...")
         self.force_quit()
     
     def run(self):
