@@ -1,13 +1,21 @@
 # Shutdown Scheduler
 
+[![Release](https://img.shields.io/badge/version-v1.0-blue.svg)](https://github.com/YOUR_USERNAME/ShutdownTimer/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://github.com/YOUR_USERNAME/ShutdownTimer)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 A simple Windows desktop application for scheduling computer shutdowns with a modern interface.
+
+## 📥 Download
+
+**Latest Release:** [ShutdownScheduler.exe v1.0](https://github.com/YOUR_USERNAME/ShutdownTimer/releases/latest)
 
 ## 🚀 Quick Start
 
 ### For Users (Executable):
-1. Download `ShutdownScheduler.exe` from the `dist/` folder
-2. Double-click to run (no installation required)
-3. Set your timer and enjoy!
+1. **Download** `ShutdownScheduler.exe` from the [Releases](https://github.com/YOUR_USERNAME/ShutdownTimer/releases) page
+2. **Double-click** to run (no installation required)
+3. **Set your timer** and enjoy!
 
 ### For Developers:
 1. Install Python 3.13+
