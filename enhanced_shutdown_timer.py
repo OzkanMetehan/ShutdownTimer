@@ -56,6 +56,12 @@ class ShutdownScheduler:
         self.root.geometry("450x400")
         self.root.resizable(True, True)
         
+        # Set window icon (if icon file exists)
+        try:
+            self.root.iconbitmap("icon.ico")  # Change "icon.ico" to your filename if different
+        except:
+            pass  # Use default icon if file doesn't exist
+        
         # Apply default theme
         self.root.configure(bg='#f0f0f0')
         
