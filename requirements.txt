@@ -7,6 +7,9 @@ pyinstaller>=6.0.0
 pystray>=0.19.0
 Pillow>=10.0.0
 
+# For single instance detection
+psutil>=5.9.0
+
 # Built-in modules used (no installation needed):
 # - tkinter (GUI framework)
 # - subprocess (system commands)

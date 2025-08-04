@@ -27,6 +27,7 @@ A simple Windows desktop application for scheduling computer shutdowns with a mo
 - **Responsive Design**: Adapts to window resizing
 - **Smart Validation**: Prevents past dates/times
 - **System Date Format**: Automatically detects user's date format
+- **Single Instance**: Prevents multiple app instances from running simultaneously
 
 ### Safety Features:
 - ⚠️ **Warning Popup**: 30-second countdown before shutdown
@@ -86,6 +87,11 @@ pyinstaller --onefile --windowed enhanced_shutdown_timer.py
 1. **Run as administrator**
 2. **Check Windows permissions**
 3. **Manual shutdown** as fallback
+
+### If you get "Application Already Running" message:
+1. **Check system tray** for the existing instance
+2. **Look for the app** in your taskbar
+3. **Use the existing instance** instead of opening a new one
 
 ## 📝 Version Info
 

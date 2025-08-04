@@ -8,6 +8,7 @@ Features:
 - Adaptive UI: Responsive layout that centers content
 - Dark theme: Modern dark interface
 - Size constraints: Prevents window from becoming too small or large
+- Single instance: Prevents multiple instances from running simultaneously
 
 Author: AI Assistant
 License: MIT
@@ -23,6 +24,17 @@ import pystray
 from PIL import Image, ImageDraw
 import signal
 import sys
+import os
+import tempfile
+
+# Try to import psutil for single instance detection
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+    print("Note: psutil not found. Single instance detection will be disabled.")
+    print("To enable this feature, run: pip install psutil")
 
 class ShutdownScheduler:
     """
@@ -35,6 +47,11 @@ class ShutdownScheduler:
     
     def __init__(self):
         """Initialize the application window and variables."""
+        # Check for existing instance before creating the app
+        if not self.check_single_instance():
+            # Exit the application if another instance is running
+            sys.exit(0)
+        
         # Create main window
         self.root = tk.Tk()
         self.root.title("Shutdown Scheduler")
@@ -78,6 +95,114 @@ class ShutdownScheduler:
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
         
+        # Create lock file for single instance
+        self.create_lock_file()
+    
+    def check_single_instance(self):
+        """
+        Check if another instance of the app is already running.
+        
+        Returns:
+            bool: True if this is the only instance, False if another instance exists
+        """
+        # If psutil is not available, use simple file-based check
+        if not PSUTIL_AVAILABLE:
+            lock_file_name = "shutdown_scheduler.lock"
+            lock_file_path = os.path.join(tempfile.gettempdir(), lock_file_name)
+            self.lock_file_path = lock_file_path
+            return True
+        
+        # Create a unique lock file name
+        lock_file_name = "shutdown_scheduler.lock"
+        lock_file_path = os.path.join(tempfile.gettempdir(), lock_file_name)
+        
+        # Check if lock file exists
+        if os.path.exists(lock_file_path):
+            try:
+                # Read the PID from the lock file
+                with open(lock_file_path, 'r') as f:
+                    pid_str = f.read().strip()
+                    if pid_str.isdigit():
+                        pid = int(pid_str)
+                        
+                        # Check if the process is still running
+                        if psutil.pid_exists(pid):
+                            # Check if it's actually our app by checking all processes
+                            try:
+                                # Get all processes and check for our app
+                                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                                    try:
+                                        if proc.info['pid'] == pid:
+                                            # This is the process from our lock file
+                                            # Check if it's our app by name or command line
+                                            proc_name = proc.info['name'].lower()
+                                            cmdline = proc.info['cmdline']
+                                            
+                                            # Check for our executable or Python script
+                                            if (any('shutdownscheduler' in name.lower() for name in [proc_name] + cmdline) or
+                                                any('enhanced_shutdown_timer.py' in arg for arg in cmdline)):
+                                                # Another instance is running
+                                                self.show_instance_warning()
+                                                return False
+                                            break
+                                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                        continue
+                            except Exception as e:
+                                print(f"Error checking processes: {e}")
+                        
+                        # Process doesn't exist, remove stale lock file
+                        try:
+                            os.remove(lock_file_path)
+                        except:
+                            pass
+            except Exception as e:
+                print(f"Error reading lock file: {e}")
+                # If we can't read the lock file, try to remove it
+                try:
+                    os.remove(lock_file_path)
+                except:
+                    pass
+        
+        # Store lock file path for cleanup
+        self.lock_file_path = lock_file_path
+        return True
+    
+    def show_instance_warning(self):
+        """Show a warning message that another instance is already running."""
+        # Create a temporary root window to show the message
+        temp_root = tk.Tk()
+        temp_root.withdraw()  # Hide the window
+        
+        # Show warning message
+        messagebox.showwarning(
+            "Application Already Running",
+            "Shutdown Scheduler is already running.\n\n"
+            "Please use the existing instance instead of opening a new one.",
+            parent=temp_root
+        )
+        
+        # Destroy the temporary root
+        temp_root.destroy()
+        
+        # Exit the application after showing the warning
+        sys.exit(0)
+    
+    def create_lock_file(self):
+        """Create a lock file with the current process ID."""
+        try:
+            with open(self.lock_file_path, 'w') as f:
+                f.write(str(os.getpid()))
+        except Exception as e:
+            print(f"Failed to create lock file: {e}")
+    
+    def cleanup_lock_file(self):
+        """Remove the lock file when the application exits."""
+        try:
+            if hasattr(self, 'lock_file_path') and os.path.exists(self.lock_file_path):
+                os.remove(self.lock_file_path)
+        except Exception as e:
+            print(f"Failed to remove lock file: {e}")
+    
     def setup_ui(self):
         """Create and configure the user interface layout."""
         # Main container frame
@@ -652,23 +777,28 @@ class ShutdownScheduler:
             # Create tray icon
             icon_image = self.create_tray_icon()
             
-            # Create tray menu
+            # Create tray menu with proper callbacks
             menu = pystray.Menu(
-                pystray.MenuItem("Show Window", self.show_window),
+                pystray.MenuItem("Show Window", self.show_window, default=True),
                 pystray.MenuItem("Cancel Timer", self.cancel_timer_from_tray),
                 pystray.MenuItem("Exit", self.quit_app)
             )
             
-            # Create tray icon
+            # Create tray icon with unique name
+            import os
+            unique_id = str(os.getpid())
             self.tray_icon = pystray.Icon(
-                "shutdown_scheduler",
+                f"shutdown_scheduler_{unique_id}",
                 icon_image,
                 "Shutdown Scheduler",
                 menu
             )
             
+            # Tray setup successful
+            
         except Exception as e:
             print(f"Failed to setup system tray: {e}")
+            self.tray_icon = None
     
     def on_minimize(self, event):
         """Handle window minimize event."""
@@ -683,8 +813,17 @@ class ShutdownScheduler:
             self.is_minimized_to_tray = True
             
             # Start tray icon if not already running
-            if self.tray_icon and not self.tray_icon.visible:
-                self.tray_icon.run_detached()
+            if self.tray_icon:
+                if not self.tray_icon.visible:
+                    # Run tray icon in a separate thread to avoid blocking
+                    import threading
+                    tray_thread = threading.Thread(target=self.tray_icon.run_detached, daemon=True)
+                    tray_thread.start()
+                else:
+                    # If already visible, update the tooltip
+                    self.update_tray_tooltip()
+            else:
+                print("Warning: No tray icon available")
                 
         except Exception as e:
             print(f"Failed to minimize to tray: {e}")
@@ -699,6 +838,15 @@ class ShutdownScheduler:
         except Exception as e:
             print(f"Failed to cleanup tray icon: {e}")
     
+    def __del__(self):
+        """Destructor to ensure tray icon is cleaned up."""
+        try:
+            if hasattr(self, 'tray_icon') and self.tray_icon:
+                if self.tray_icon.visible:
+                    self.tray_icon.stop()
+        except:
+            pass
+    
     def show_window(self, icon=None, item=None):
         """Show the main window from system tray."""
         try:
@@ -707,9 +855,8 @@ class ShutdownScheduler:
             self.root.focus_force()  # Focus the window
             self.is_minimized_to_tray = False
             
-            # Stop tray icon
-            if self.tray_icon and self.tray_icon.visible:
-                self.tray_icon.stop()
+            # Don't stop the tray icon - keep it running for future minimize
+            # The tray icon will be cleaned up when the app exits
                 
         except Exception as e:
             print(f"Failed to show window: {e}")
@@ -729,25 +876,67 @@ class ShutdownScheduler:
             # If no timer running, close the app
             self.quit_app()
     
+    def force_quit(self):
+        """Force quit the application with proper cleanup."""
+        try:
+            # Stop tray icon first - this is critical
+            if self.tray_icon:
+                try:
+                    if self.tray_icon.visible:
+                        self.tray_icon.stop()
+                        # Give it a moment to stop
+                        import time
+                        time.sleep(0.1)
+                except Exception as e:
+                    print(f"Failed to stop tray icon: {e}")
+                finally:
+                    self.tray_icon = None
+            
+            # Clean up lock file
+            self.cleanup_lock_file()
+            
+            # Use sys.exit for proper cleanup
+            sys.exit(0)
+        except:
+            import os
+            os._exit(0)
+    
     def quit_app(self, icon=None, item=None):
         """Quit the application."""
         try:
-            # Clean up tray icon properly
-            self.cleanup_tray_icon()
+            # Stop tray icon first - this is critical
+            if self.tray_icon:
+                try:
+                    if self.tray_icon.visible:
+                        self.tray_icon.stop()
+                        # Give it a moment to stop
+                        import time
+                        time.sleep(0.1)
+                except Exception as e:
+                    print(f"Failed to stop tray icon: {e}")
+                finally:
+                    self.tray_icon = None
             
             # Cancel any running timer
             if self.timer_running:
                 self.cancel_timer()
             
+            # Clean up lock file
+            self.cleanup_lock_file()
+            
             # Destroy the main window
             self.root.destroy()
             
-            # Force exit the application
-            import os
-            os._exit(0)
+            # Use sys.exit instead of os._exit for proper cleanup
+            sys.exit(0)
             
         except Exception as e:
             print(f"Failed to quit app: {e}")
+            # Clean up lock file even if there's an error
+            try:
+                self.cleanup_lock_file()
+            except:
+                pass
             # Force exit even if there's an error
             import os
             os._exit(0)
@@ -775,7 +964,7 @@ class ShutdownScheduler:
     def signal_handler(self, signum, frame):
         """Handle system signals for proper cleanup."""
         print(f"Received signal {signum}, cleaning up...")
-        self.quit_app()
+        self.force_quit()
     
     def run(self):
         """Start the application main loop."""
